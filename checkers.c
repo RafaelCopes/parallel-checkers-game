@@ -11,21 +11,24 @@ void printBoard();
 int isNotWithinBounds(int toRow, int toCol);
 int isValidMove(int turn, int fromRow, int fromCol, int toRow, int toCol);
 void makeMove(int turn, int fromRow, int fromCol, int toRow, int toCol);
+void undoMove();
 int isGameOver();
 int getPlayerMove(int turn, int* fromRow, int* fromCol, int* toRow, int* toCol);
+void getPossibleMoves(int turn, int possibleMoves[100][4], int* numMoves);
 
 /*int board[BOARD_SIZE][BOARD_SIZE] = {
 	{2, 0, 2, 0, 2, 0, 0, 0},
 	{0, 0, 0, 0, 0, 0, 0, 0},
 	{2, 0, 2, 0, 0, 0, 0, 0},
 	{0, 0, 0, 3, 0, 0, 0, 0},
-	{0, 0, 0, 0, 0, 0, 0, 0},
-	{0, 0, 0, 0, 0, 0, 0, 0},
-	{1, 0, 1, 0, 1, 0, 0, 0},
+	{0, 0, 0, 0, 2, 0, 0, 0},
+	{0, 0, 0, 1, 0, 0, 0, 0},
+	{1, 0, 1, 0, 0, 0, 0, 0},
 	{0, 1, 0, 1, 0, 4, 0, 3},
 };*/
 
 int board[BOARD_SIZE][BOARD_SIZE];
+int prevBoard[BOARD_SIZE][BOARD_SIZE]; // should this be here???????
 int turn = PLAYER1;
 
 int main() {
@@ -33,9 +36,22 @@ int main() {
 	printBoard();
 
 	int fromRow, fromCol, toRow, toCol;
+	int possibleMoves[100][4];
+	int numMoves = 0;
 
 	// main game loop
 	while (!isGameOver()) {
+		// possible moves for the current player
+		getPossibleMoves(turn, possibleMoves, &numMoves);
+
+		// print all possible moves for the current player
+		printf("Possible moves for Player %d:\n", turn);
+		for (int i = 0; i < numMoves; ++i) {
+			printf("%d. From: %d %d, To: %d %d\n", i + 1,
+			possibleMoves[i][0], possibleMoves[i][1],
+			possibleMoves[i][2], possibleMoves[i][3]);
+		}
+
 		if (getPlayerMove(turn, &fromRow, &fromCol, &toRow, &toCol)) {
 			makeMove(turn, fromRow, fromCol, toRow, toCol);
 			printBoard();
@@ -140,10 +156,10 @@ int isNotWithinBounds(int toRow, int toCol) {
 
 // check if a move is valid
 int isValidMove(int turn, int fromRow, int fromCol, int toRow, int toCol) {
-	// check if the destination is within the bounds of the board
+	// check if the toination is within the bounds of the board
 	if (isNotWithinBounds(toRow, toCol)) return 0;
 
-	// check if the destination is empty
+	// check if the toination is empty
 	if (board[toRow][toCol] != EMPTY_CELL) return 0;
 
 	// check if the piece is moving diagonally
@@ -169,7 +185,8 @@ int isValidMove(int turn, int fromRow, int fromCol, int toRow, int toCol) {
 		int midCol = (fromCol + toCol) / 2;
 
 		// check if the middle cell contains an opponent's piece or opponent king
-		if (board[midRow][midCol] == turn || board[midRow][midCol] == turn + 2) return 0;
+		if (board[midRow][midCol] == turn || board[midRow][midCol] == turn + 2 || board[midRow][midCol] == EMPTY_CELL)
+			return 0;
 	}
 
 	// check for conditions if it is a king piece
@@ -194,9 +211,16 @@ int isValidMove(int turn, int fromRow, int fromCol, int toRow, int toCol) {
  
 // function to update the board after a valid move
 void makeMove(int turn, int fromRow, int fromCol, int toRow, int toCol) {
+	// save the previous board state before making the move
+	for (int row = 0; row < BOARD_SIZE; ++row) {
+		for (int col = 0; col < BOARD_SIZE; ++col) {
+			prevBoard[row][col] = board[row][col];
+		}
+	}
+	
 	int isKing = (board[fromRow][fromCol] == turn + 2) ? 1 : 0;
 	
-	// move the piece to the destination cell
+	// move the piece to the toination cell
 	board[toRow][toCol] = board[fromRow][fromCol];
 	board[fromRow][fromCol] = EMPTY_CELL;
 
@@ -225,6 +249,16 @@ void makeMove(int turn, int fromRow, int fromCol, int toRow, int toCol) {
 		int rowDir = (toRow - fromRow) / rowDiff; // 1 or -1
 		int colDir = (toCol - fromCol) / colDiff; // 1 or -1
 		board[toRow-rowDir][toCol-colDir] = EMPTY_CELL;
+	}
+}
+
+// undo the last move
+void undoMove() {
+	// restore the board to the previous state
+	for (int row = 0; row < BOARD_SIZE; ++row) {
+		for (int col = 0; col < BOARD_SIZE; ++col) {
+			board[row][col] = prevBoard[row][col];
+		}
 	}
 }
 
@@ -280,9 +314,9 @@ int isGameOver() {
 // function to prompt the player for their move and validate the input
 int getPlayerMove(int turn, int* fromRow, int* fromCol, int* toRow, int* toCol) {
 	if (turn == PLAYER1) {
-		printf("Player1(X) turn:\n");
+		printf("Player 1(X) turn:\n");
 	} else {
-		printf("Player2(O) turn:\n");
+		printf("Player 2(O) turn:\n");
 	}
 	printf("Enter your move (fromRow fromCol toRow toCol): ");
 	fflush(stdout);
@@ -304,4 +338,29 @@ int getPlayerMove(int turn, int* fromRow, int* fromCol, int* toRow, int* toCol) 
 	}
 
 	return 1; // valid input
+}
+
+// generate all possible moves for a player
+void getPossibleMoves(int turn, int possibleMoves[100][4], int* numMoves) {
+	*numMoves = 0;
+
+	// loop through the board and find all possible moves for the current player
+	for (int fromRow = 0; fromRow < BOARD_SIZE; ++fromRow) {
+		for (int fromCol = 0; fromCol < BOARD_SIZE; ++fromCol) {
+			if (board[fromRow][fromCol] == turn || board[fromRow][fromCol] == turn + 2) {
+				for (int toRow = 0; toRow < BOARD_SIZE; ++toRow) {
+					for (int toCol = 0; toCol < BOARD_SIZE; ++toCol) {
+						if (isValidMove(turn, fromRow, fromCol, toRow, toCol)) {
+							// add the move to the list of possible moves
+							possibleMoves[*numMoves][0] = fromRow;
+							possibleMoves[*numMoves][1] = fromCol;
+							possibleMoves[*numMoves][2] = toRow;
+							possibleMoves[*numMoves][3] = toCol;
+							(*numMoves)++;
+						}
+					}
+				}
+			}
+		}
+	}
 }
