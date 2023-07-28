@@ -19,17 +19,9 @@ void undoMove();
 int isGameOver();
 int getPlayerMove(int turn, int* fromRow, int* fromCol, int* toRow, int* toCol);
 void getPossibleMoves(int turn, int possibleMoves[100][4], int* numMoves);
-
-/*int board[BOARD_SIZE][BOARD_SIZE] = {
-	{2, 0, 2, 0, 2, 0, 0, 0},
-	{0, 0, 0, 0, 0, 0, 0, 0},
-	{2, 0, 2, 0, 0, 0, 0, 0},
-	{0, 0, 0, 3, 0, 0, 0, 0},
-	{0, 0, 0, 0, 2, 0, 0, 0},
-	{0, 0, 0, 1, 0, 0, 0, 0},
-	{1, 0, 1, 0, 0, 0, 0, 0},
-	{0, 1, 0, 1, 0, 4, 0, 3},
-};*/
+int evaluatePosition();
+int minimax(int depth, int turn, int alpha, int beta);
+int getBestMoveForOpponent(int turn, int* fromRow, int* fromCol, int* toRow, int* toCol);
 
 // board state stack to handle undoing moves
 typedef struct {
@@ -40,35 +32,41 @@ int board[BOARD_SIZE][BOARD_SIZE];
 PreviousStateStack boardStack[100]; // define a large enough stack size
 int stackTop = -1;
 int turn = PLAYER1;
+int maxDepth;
 
 int main() {
 	initializeBoard();
-	printBoard();
 
 	int fromRow, fromCol, toRow, toCol;
 	int possibleMoves[100][4];
 	int numMoves = 0;
 
+	printf("Enter the max depth to be searched: ");
+	fflush(stdout);
+	scanf("%d", &maxDepth);
+	getchar();
+
+	printBoard();
+
 	// main game loop
 	while (!isGameOver()) {
-		// possible moves for the current player
-		getPossibleMoves(turn, possibleMoves, &numMoves);
+		// my turn
+		if (turn == PLAYER1) {
+			if (getPlayerMove(turn, &fromRow, &fromCol, &toRow, &toCol)) {
+				makeMove(turn, fromRow, fromCol, toRow, toCol);
+				printBoard();
 
-		// print all possible moves for the current player
-		printf("Possible moves for Player %d:\n", turn);
-		for (int i = 0; i < numMoves; ++i) {
-			printf("%d. From: %d %d, To: %d %d\n", i + 1,
-			possibleMoves[i][0], possibleMoves[i][1],
-			possibleMoves[i][2], possibleMoves[i][3]);
-		}
-
-		if (getPlayerMove(turn, &fromRow, &fromCol, &toRow, &toCol)) {
+				turn = (turn == PLAYER1) ? PLAYER2 : PLAYER1;
+			} else {
+				printf("Invalid move. Try again.\n");
+			}
+			// AI turn
+		}	else {
+			getBestMoveForOpponent(turn, &fromRow, &fromCol, &toRow, &toCol);
 			makeMove(turn, fromRow, fromCol, toRow, toCol);
+			printf("Player 2(O) move: %d %d %d %d\n", fromRow, fromCol, toRow, toCol);
 			printBoard();
-
 			turn = (turn == PLAYER1) ? PLAYER2 : PLAYER1;
-		} else {
-			printf("Invalid move. Try again.\n");
 		}
 	}
 
@@ -85,11 +83,11 @@ int main() {
 		}
 
 		if (player1Pieces > player2Pieces)
-			printf("Player 1 wins!\n");
+			printf("Player 1(X) wins!\n");
 		else if (player2Pieces > player1Pieces)
-			printf("Player 2 wins!\n");
+			printf("Player 2(O) wins!\n");
 		else
-			printf("It's a draw!\n");
+			printf("Draw!\n");
 	}
 
 	return 0;
@@ -115,6 +113,7 @@ void initializeBoard() {
 
 // printing the board
 void printBoard() {
+	printf("\n");
 	printf("    ");
 	for (int col = 0; col < BOARD_SIZE; ++col) {
 		printf("  %d ", col);
@@ -158,6 +157,8 @@ void printBoard() {
 			
 		printf("\n");
 	}
+
+	printf("\n");
 }
 // check if stack is empty
 int isStackEmpty() {
@@ -399,4 +400,155 @@ void getPossibleMoves(int turn, int possibleMoves[100][4], int* numMoves) {
 			}
 		}
 	}
+}
+
+// evaluate the board position
+int evaluatePosition() {
+	int player1Pieces = 0, player2Pieces = 0;
+	int player1Kings = 0, player2Kings = 0;
+
+	int score = 0;
+
+	// count pieces and calculate score
+	for (int row = 0; row < BOARD_SIZE; row++) {
+		for (int col = 0; col < BOARD_SIZE; col++) {
+			// score for normal pieces
+			if (board[row][col] == PLAYER2) {
+				player2Pieces++;
+				score += 100;
+			} else if (board[row][col] == PLAYER1) {
+				player1Pieces++;
+				score -= 100;
+				// more score for king pieces
+			} else if (board[row][col] == PLAYER2 + 2) {
+				player2Kings++;
+				score += 300;
+			} else if (board[row][col] == PLAYER1 + 2) {
+				player1Kings++;
+				score -= 300;
+			}
+
+			// higher score for controlling the center of the board (rows 3-4 and columns 2-5)
+			// block me from going into the center
+			if (row >= 3 && row <= 4 && col >= 2 && col <= 5) {
+				if (board[row][col] == PLAYER2)
+								score += 50;
+				else if (board[row][col] == PLAYER1)
+								score -= 50;
+				else if (board[row][col] == PLAYER2 + 2)
+								score += 100;
+				else if (board[row][col] == PLAYER1 + 2)
+								score -= 100;
+			}
+		}
+	}
+
+	// add score for having more pieces and kings
+	// and make it capture pieces and kings
+	score += 10 * (player2Pieces + player2Kings - player1Pieces - player1Kings);
+
+	return score;
+}
+
+// minimax with alpha-beta prunning
+int minimax(int depth, int turn, int alpha, int beta) {
+	// when max depth is reached, start evaluate the position
+	if (depth == maxDepth) {
+		return evaluatePosition();
+	}
+
+	// get the posible moves for this position
+	int moves[100][4];
+	int numMoves = 0;
+	getPossibleMoves(turn, moves, &numMoves);
+	
+	// AI turn (maximize the score)
+	if (turn == PLAYER2) { 
+		int maxScore = -9999;
+
+		// for each of the possible moves, call minimax again
+		for (int i = 0; i < numMoves; i++) {
+			int fromRow = moves[i][0], fromCol = moves[i][1];
+			int toRow = moves[i][2], toCol = moves[i][3];
+
+			makeMove(turn, fromRow, fromCol, toRow, toCol);
+			int score = minimax(depth + 1, PLAYER1, alpha, beta);
+			undoMove();
+
+			// calculate max score for this position
+			if (score > maxScore)
+				maxScore = score;
+
+			// calculate alpha for this position
+			if (maxScore > alpha)
+				alpha = maxScore;
+
+			// beta prunning
+			if (beta <= alpha)
+				break; 
+		}
+
+		return maxScore;
+		// my turn (minimize the score)
+	} else { 
+		int minScore = 9999;
+
+		// for each of the possible moves, call minimax again
+		for (int i = 0; i < numMoves; i++) {
+			int fromRow = moves[i][0], fromCol = moves[i][1];
+			int toRow = moves[i][2], toCol = moves[i][3];
+
+			makeMove(turn, fromRow, fromCol, toRow, toCol);
+			int score = minimax(depth + 1, PLAYER2, alpha, beta);
+			undoMove();
+
+			// calculate min score for this position
+			if (score < minScore)
+				minScore = score;
+
+			// calculate beta
+			if (minScore < beta)
+				beta = minScore;
+
+			// alpha prunning
+			if (beta <= alpha)
+				break; 
+		}
+
+		return minScore;
+	}
+}
+
+// get the best move for the AI opponent
+int getBestMoveForOpponent(int turn, int* fromRow, int* fromCol, int* toRow, int* toCol) {
+	// get move possible moves to pick
+	int moves[100][4];
+	int numMoves = 0;
+	getPossibleMoves(turn, moves, &numMoves);
+
+	int bestScore = -9999;
+	int bestMoveIndex = -1;
+
+	// call minimax and get the index of the best move
+	for (int i = 0; i < numMoves; ++i) {
+		int currentFromRow = moves[i][0];
+		int currentFromCol = moves[i][1];
+		int currentToRow = moves[i][2];
+		int currentToCol = moves[i][3];
+
+		makeMove(turn, currentFromRow, currentFromCol, currentToRow, currentToCol);
+		int score = minimax(0, PLAYER1, -9999, 9999);
+		undoMove();
+
+		if (score > bestScore) {
+			bestScore = score;
+			bestMoveIndex = i;
+		}
+	}
+
+	// update variables
+	*fromRow = moves[bestMoveIndex][0];
+	*fromCol = moves[bestMoveIndex][1];
+	*toRow = moves[bestMoveIndex][2];
+	*toCol = moves[bestMoveIndex][3];
 }
