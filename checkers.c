@@ -9,6 +9,10 @@
 void initializeBoard();
 void printBoard();
 int isNotWithinBounds(int toRow, int toCol);
+int isStackEmpty();
+void pushBoardState();
+void popBoardState();
+void restoreBoardState();
 int isValidMove(int turn, int fromRow, int fromCol, int toRow, int toCol);
 void makeMove(int turn, int fromRow, int fromCol, int toRow, int toCol);
 void undoMove();
@@ -27,8 +31,14 @@ void getPossibleMoves(int turn, int possibleMoves[100][4], int* numMoves);
 	{0, 1, 0, 1, 0, 4, 0, 3},
 };*/
 
+// board state stack to handle undoing moves
+typedef struct {
+	int board[BOARD_SIZE][BOARD_SIZE];
+} PreviousStateStack;
+
 int board[BOARD_SIZE][BOARD_SIZE];
-int prevBoard[BOARD_SIZE][BOARD_SIZE]; // should this be here???????
+PreviousStateStack boardStack[100]; // define a large enough stack size
+int stackTop = -1;
 int turn = PLAYER1;
 
 int main() {
@@ -55,6 +65,7 @@ int main() {
 		if (getPlayerMove(turn, &fromRow, &fromCol, &toRow, &toCol)) {
 			makeMove(turn, fromRow, fromCol, toRow, toCol);
 			printBoard();
+
 			turn = (turn == PLAYER1) ? PLAYER2 : PLAYER1;
 		} else {
 			printf("Invalid move. Try again.\n");
@@ -88,7 +99,7 @@ int main() {
 void initializeBoard() {
 	for (int row = 0; row < BOARD_SIZE; ++row) {
 		for (int col = 0; col < BOARD_SIZE; ++col) {
-			if ((row + col) % 2 == 0) {
+			if ((row + col) % 2 == 1) {
 				if (row < 3)
 					board[row][col] = PLAYER2; // player 1 pieces
 				else if (row > BOARD_SIZE - 4)
@@ -148,6 +159,34 @@ void printBoard() {
 		printf("\n");
 	}
 }
+// check if stack is empty
+int isStackEmpty() {
+	return stackTop == -1;
+}
+
+// push board state to stack
+void pushBoardState() {
+	stackTop++;
+	for (int row = 0; row < BOARD_SIZE; ++row) {
+		for (int col = 0; col < BOARD_SIZE; ++col) {
+			boardStack[stackTop].board[row][col] = board[row][col];
+		}
+	}
+}
+
+// pop board state from stack
+void popBoardState() {
+	stackTop--;
+}
+
+// restore board state
+void restoreBoardState() {
+	for (int row = 0; row < BOARD_SIZE; ++row) {
+		for (int col = 0; col < BOARD_SIZE; ++col) {
+			board[row][col] = boardStack[stackTop].board[row][col];
+		}
+	}
+}
 
 // check if not within the bounds of the board
 int isNotWithinBounds(int toRow, int toCol) {
@@ -156,10 +195,13 @@ int isNotWithinBounds(int toRow, int toCol) {
 
 // check if a move is valid
 int isValidMove(int turn, int fromRow, int fromCol, int toRow, int toCol) {
-	// check if the toination is within the bounds of the board
+	// check if the destination is within the bounds of the board
 	if (isNotWithinBounds(toRow, toCol)) return 0;
 
-	// check if the toination is empty
+	// check if the cell selected not is empty
+	if (board[fromRow][fromCol] == EMPTY_CELL) return 0;
+
+	// check if the destination is empty
 	if (board[toRow][toCol] != EMPTY_CELL) return 0;
 
 	// check if the piece is moving diagonally
@@ -211,15 +253,10 @@ int isValidMove(int turn, int fromRow, int fromCol, int toRow, int toCol) {
  
 // function to update the board after a valid move
 void makeMove(int turn, int fromRow, int fromCol, int toRow, int toCol) {
-	// save the previous board state before making the move
-	for (int row = 0; row < BOARD_SIZE; ++row) {
-		for (int col = 0; col < BOARD_SIZE; ++col) {
-			prevBoard[row][col] = board[row][col];
-		}
-	}
-	
+	pushBoardState();
+
 	int isKing = (board[fromRow][fromCol] == turn + 2) ? 1 : 0;
-	
+
 	// move the piece to the toination cell
 	board[toRow][toCol] = board[fromRow][fromCol];
 	board[fromRow][fromCol] = EMPTY_CELL;
@@ -254,11 +291,10 @@ void makeMove(int turn, int fromRow, int fromCol, int toRow, int toCol) {
 
 // undo the last move
 void undoMove() {
-	// restore the board to the previous state
-	for (int row = 0; row < BOARD_SIZE; ++row) {
-		for (int col = 0; col < BOARD_SIZE; ++col) {
-			board[row][col] = prevBoard[row][col];
-		}
+	// Restore the board to the previous state
+	if (!isStackEmpty()) {
+		restoreBoardState();
+		popBoardState();
 	}
 }
 
