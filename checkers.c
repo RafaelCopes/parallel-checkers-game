@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <omp.h>
 
 #define BOARD_SIZE 8
 #define EMPTY_CELL 0
@@ -15,6 +16,7 @@ void makeMove(int board[BOARD_SIZE][BOARD_SIZE], int turn, int fromRow, int from
 int isGameOver(int board[BOARD_SIZE][BOARD_SIZE]);
 int getPlayerMove(int board[BOARD_SIZE][BOARD_SIZE], int turn, int* fromRow, int* fromCol, int* toRow, int* toCol);
 void getPossibleMoves(int board[BOARD_SIZE][BOARD_SIZE], int turn, int possibleMoves[100][4], int* numMoves);
+int hasValidMoves(int board[BOARD_SIZE][BOARD_SIZE], int turn);
 int evaluatePosition(int board[BOARD_SIZE][BOARD_SIZE]);
 int minimax(int board[BOARD_SIZE][BOARD_SIZE], int maxDepth, int depth, int turn, int alpha, int beta);
 int getBestMoveForOpponent(int board[BOARD_SIZE][BOARD_SIZE], int turn, int maxDepth, int* fromRow, int* fromCol, int* toRow, int* toCol);
@@ -23,12 +25,10 @@ int main() {
 	int board[BOARD_SIZE][BOARD_SIZE];
 	int turn = PLAYER1;
 	int maxDepth;
+	int fromRow, fromCol, toRow, toCol;
+	double start, end; 
 
 	initializeBoard(board);
-
-	int fromRow, fromCol, toRow, toCol;
-	int possibleMoves[100][4];
-	int numMoves = 0;
 
 	printf("Enter the max depth to be searched: ");
 	fflush(stdout);
@@ -50,10 +50,13 @@ int main() {
 				printf("Invalid move. Try again.\n");
 			}
 			// AI turn
-		}	else {
+		}	else { 
+      start = omp_get_wtime();
 			getBestMoveForOpponent(board, turn, maxDepth, &fromRow, &fromCol, &toRow, &toCol);
+      end = omp_get_wtime(); 
 			makeMove(board, turn, fromRow, fromCol, toRow, toCol);
 			printf("Player 2(O) move: %d %d %d %d\n", fromRow, fromCol, toRow, toCol);
+      printf("Play took %f seconds\n", end - start);
 			printBoard(board);
 			turn = (turn == PLAYER1) ? PLAYER2 : PLAYER1;
 		}
@@ -152,11 +155,11 @@ void printBoard(int board[BOARD_SIZE][BOARD_SIZE]) {
 
 // create a copy of the board
 void copyBoard(int src[BOARD_SIZE][BOARD_SIZE], int dest[BOARD_SIZE][BOARD_SIZE]) {
-    for (int row = 0; row < BOARD_SIZE; ++row) {
-        for (int col = 0; col < BOARD_SIZE; ++col) {
-            dest[row][col] = src[row][col];
-        }
-    }
+	for (int row = 0; row < BOARD_SIZE; ++row) {
+		for (int col = 0; col < BOARD_SIZE; ++col) {
+			dest[row][col] = src[row][col];
+		}
+	}
 }
 
 // check if not within the bounds of the board
@@ -226,7 +229,7 @@ int isValidMove(int board[BOARD_SIZE][BOARD_SIZE], int turn, int fromRow, int fr
 void makeMove(int board[BOARD_SIZE][BOARD_SIZE], int turn, int fromRow, int fromCol, int toRow, int toCol) {
 	int isKing = (board[fromRow][fromCol] == turn + 2) ? 1 : 0;
 
-	// move the piece to the toination cell
+	// move the piece to the destination cell
 	board[toRow][toCol] = board[fromRow][fromCol];
 	board[fromRow][fromCol] = EMPTY_CELL;
 
@@ -271,9 +274,13 @@ int isGameOver(int board[BOARD_SIZE][BOARD_SIZE]) {
 			}
 	}
 
+	// if a player has no pieces the game is over
 	if (player1Pieces == 0 || player2Pieces == 0) return 1;
 
-	// maybe add more conditions ????????
+	// check for stalemate, if so it is a draw
+	if (!hasValidMoves(board, PLAYER1) || !hasValidMoves(board, PLAYER2)) {
+		return 1;
+	}
 
 	return 0; // game is not over
 }
@@ -305,6 +312,26 @@ int getPlayerMove(int board[BOARD_SIZE][BOARD_SIZE], int turn, int* fromRow, int
 	}
 
 	return 1; // valid input
+}
+
+// check if a player has any valid moves left
+int hasValidMoves(int board[BOARD_SIZE][BOARD_SIZE], int turn) {
+	// loop through the board and find all possible moves for the current player
+	for (int fromRow = 0; fromRow < BOARD_SIZE; ++fromRow) {
+		for (int fromCol = 0; fromCol < BOARD_SIZE; ++fromCol) {
+			if (board[fromRow][fromCol] == turn || board[fromRow][fromCol] == turn + 2) {
+				for (int toRow = 0; toRow < BOARD_SIZE; ++toRow) {
+					for (int toCol = 0; toCol < BOARD_SIZE; ++toCol) {
+						if (isValidMove(board, turn, fromRow, fromCol, toRow, toCol)) {
+							return 1; // found a valid move
+						}
+					}
+				}
+			}
+		}
+	}
+
+	return 0; // no valid moves
 }
 
 // generate all possible moves for a player
@@ -362,13 +389,13 @@ int evaluatePosition(int board[BOARD_SIZE][BOARD_SIZE]) {
 			// block me from going into the center
 			if (row >= 3 && row <= 4 && col >= 2 && col <= 5) {
 				if (board[row][col] == PLAYER2)
-								score += 50;
+					score += 50;
 				else if (board[row][col] == PLAYER1)
-								score -= 50;
+					score -= 50;
 				else if (board[row][col] == PLAYER2 + 2)
-								score += 100;
+					score += 100;
 				else if (board[row][col] == PLAYER1 + 2)
-								score -= 100;
+					score -= 100;
 			}
 		}
 	}
@@ -376,13 +403,14 @@ int evaluatePosition(int board[BOARD_SIZE][BOARD_SIZE]) {
 	// add score for having more pieces and kings
 	// and make it capture pieces and kings
 	score += 10 * (player2Pieces + player2Kings - player1Pieces - player1Kings);
+	//score += player2Pieces - player1Pieces + (0.5 * player2Kings - 0.5 * player1Kings);
 
 	return score;
 }
 
 // minimax with alpha-beta prunning
 int minimax(int board[BOARD_SIZE][BOARD_SIZE], int maxDepth, int depth, int turn, int alpha, int beta) {
-	// when max depth is reached, start evaluate the position
+	// when max depth is reached, start evaluating the position
 	if (depth == maxDepth) {
 		return evaluatePosition(board);
 	}
@@ -392,7 +420,7 @@ int minimax(int board[BOARD_SIZE][BOARD_SIZE], int maxDepth, int depth, int turn
 	int numMoves = 0;
 	getPossibleMoves(board, turn, moves, &numMoves);
 	
-	// AI turn (maximize the score)
+	// AI turn,  max the score
 	if (turn == PLAYER2) { 
 		int maxScore = -9999;
 
@@ -418,7 +446,7 @@ int minimax(int board[BOARD_SIZE][BOARD_SIZE], int maxDepth, int depth, int turn
 		}
 
 		return maxScore;
-		// my turn (minimize the score)
+		// my turn, min the score
 	} else { 
 		int minScore = 9999;
 
@@ -457,6 +485,7 @@ int getBestMoveForOpponent(int board[BOARD_SIZE][BOARD_SIZE], int turn, int maxD
 	int bestMoveIndex = -1;
 
 	// call minimax and get the index of the best move
+	#pragma omp parallel for
 	for (int i = 0; i < numMoves; ++i) {
 		int currentFromRow = moves[i][0];
 		int currentFromCol = moves[i][1];
@@ -469,9 +498,12 @@ int getBestMoveForOpponent(int board[BOARD_SIZE][BOARD_SIZE], int turn, int maxD
 		makeMove(boardCopy, turn, currentFromRow, currentFromCol, currentToRow, currentToCol);
 		int score = minimax(boardCopy, maxDepth, 0, PLAYER1, -9999, 9999);
 
-		if (score > bestScore) {
-			bestScore = score;
-			bestMoveIndex = i;
+		#pragma omp critical
+		{
+			if (score > bestScore) {
+				bestScore = score;
+				bestMoveIndex = i;
+			}
 		}
 	}
 
