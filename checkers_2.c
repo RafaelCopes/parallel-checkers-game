@@ -27,7 +27,6 @@ int main(int argc, char** argv) {
 	int turn = PLAYER1;
 	int maxDepth;
 	int fromRow, fromCol, toRow, toCol;
-	double start, end;
 
 	initializeBoard(board);
 
@@ -97,7 +96,6 @@ int main(int argc, char** argv) {
 			if (rank == play) {
 				makeMove(board, turn, fromRow, fromCol, toRow, toCol);
 				printf("Player 2(O) move: %d %d %d %d\n", fromRow, fromCol, toRow, toCol);
-				printf("Play took %f seconds\n", end - start);
 				printBoard(board);
 				turn = (turn == PLAYER1) ? PLAYER2 : PLAYER1;
 			}
@@ -539,13 +537,6 @@ int getBestMoveForOpponent(int board[BOARD_SIZE][BOARD_SIZE], int turn, int maxD
 	int startIndex = rank * movesPerProcess + (rank < remainder ? rank : remainder);
 	int endIndex = startIndex + movesPerProcess + (rank < remainder ? 1 : 0);
 
-	//printf("numMoves: %d", numMoves);
-	//if (endIndex == numMoves) {
-	//	endIndex = endIndex + 1;
-	//}
-
-	printf("\n\nrank: %d, inicial: %d, final: %d\n\n\n", rank, startIndex, endIndex);
-
 	// call minimax and get the index of the best move
 	#pragma omp parallel for
 	for (int i = startIndex; i < endIndex; ++i) {
@@ -575,6 +566,4 @@ int getBestMoveForOpponent(int board[BOARD_SIZE][BOARD_SIZE], int turn, int maxD
 	*toRow = moves[bestMoveIndex][2];
 	*toCol = moves[bestMoveIndex][3];
 	*score = bestScore;
-
-	//printf("\n\njogada rank %d: %d %d %d %d, score: %d\n\n", rank, *fromRow, *fromCol, *toRow, *toCol, *score);
 }
