@@ -53,7 +53,6 @@ int main(int argc, char** argv) {
 	while (!isGameOver(board)) {
 		// my turn
 		if (turn == PLAYER1) {
-			MPI_Barrier(MPI_COMM_WORLD);
 			if (rank == 0) {
 				if (getPlayerMove(board, turn, &fromRow, &fromCol, &toRow, &toCol)) {
 					makeMove(board, turn, fromRow, fromCol, toRow, toCol);
@@ -76,7 +75,6 @@ int main(int argc, char** argv) {
 
 			getBestMoveForOpponent(board, turn, maxDepth, &fromRow, &fromCol, &toRow, &toCol, &score, rank, numProcesses);
 			
-			MPI_Barrier(MPI_COMM_WORLD);
 			MPI_Gather(&score, 1, MPI_INT, scores, 1, MPI_INT, 0, MPI_COMM_WORLD);
 
 			if (rank == 0) {
@@ -91,7 +89,6 @@ int main(int argc, char** argv) {
 			} 
 				
 			MPI_Bcast(&play, 1, MPI_INT, 0, MPI_COMM_WORLD);
-			MPI_Barrier(MPI_COMM_WORLD);
 
 			if (rank == play) {
 				makeMove(board, turn, fromRow, fromCol, toRow, toCol);
@@ -386,9 +383,11 @@ void getPossibleMoves(int board[BOARD_SIZE][BOARD_SIZE], int turn, int possibleM
 	*numMoves = 0;
 
 	// loop through the board and find all possible moves for the current player
+	#pragma omp parallel for collapse(2)
 	for (int fromRow = 0; fromRow < BOARD_SIZE; ++fromRow) {
 		for (int fromCol = 0; fromCol < BOARD_SIZE; ++fromCol) {
 			if (board[fromRow][fromCol] == turn || board[fromRow][fromCol] == turn + 2) {
+				#pragma omp parallel for collapse(2)
 				for (int toRow = 0; toRow < BOARD_SIZE; ++toRow) {
 					for (int toCol = 0; toCol < BOARD_SIZE; ++toCol) {
 						if (isValidMove(board, turn, fromRow, fromCol, toRow, toCol)) {

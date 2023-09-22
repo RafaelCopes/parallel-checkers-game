@@ -339,9 +339,11 @@ void getPossibleMoves(int board[BOARD_SIZE][BOARD_SIZE], int turn, int possibleM
 	*numMoves = 0;
 
 	// loop through the board and find all possible moves for the current player
+	#pragma omp parallel for collapse(2)
 	for (int fromRow = 0; fromRow < BOARD_SIZE; ++fromRow) {
 		for (int fromCol = 0; fromCol < BOARD_SIZE; ++fromCol) {
 			if (board[fromRow][fromCol] == turn || board[fromRow][fromCol] == turn + 2) {
+				#pragma omp parallel for collapse(2)
 				for (int toRow = 0; toRow < BOARD_SIZE; ++toRow) {
 					for (int toCol = 0; toCol < BOARD_SIZE; ++toCol) {
 						if (isValidMove(board, turn, fromRow, fromCol, toRow, toCol)) {
